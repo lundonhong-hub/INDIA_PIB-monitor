@@ -40,17 +40,49 @@ RSS_URL = "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3"
 # 감시 키워드 (제목에서 소문자로 매칭). PIB RSS엔 본문(description)이 없어서
 # 제목에만 걸린다 → 넓게 잡아두고 메일 받아보며 조절하는 게 실전.
 KEYWORDS = [
+    # --- 티어1: 제품 직결 ---
     "copper",
+    "copper tube",
+    "copper pipe",
+    "copper alloy",
+    "refined copper",
     "hindustan copper",
-    "quality control order",
-    "qco",
-    "bis",
+    "10773",
+    # --- 티어2: 무역구제 (수출기업 최우선) ---
     "anti-dumping",
     "anti dumping",
     "antidumping",
-    "dgtr",
-    "safeguard duty",
     "countervailing",
+    "safeguard duty",
+    "dgtr",
+    "trade remedy",
+    "dumping duty",
+    # --- 티어3: 품질규제/BIS ---
+    "bis",
+    "quality control order",
+    "qco",
+    "is 10773",
+    "bis certification",
+    "mandatory certification",
+    # --- 티어4: 관세/무역정책 ---
+    "customs duty",
+    "import duty",
+    "basic customs duty",
+    "bcd",
+    "import policy",
+    "tariff",
+    "hs code",
+    "import restriction",
+    # --- 티어5: 국가/협정 (베트남 공장 핵심) ---
+    "asean",
+    "asean-india",
+    "vietnam",
+    "free trade agreement",
+    "fta",
+    "rules of origin",
+    "ceca",
+    "korea",
+    "india-korea",
 ]
 
 STATE_FILE = "state.json"          # 이미 알린 PRID 목록
