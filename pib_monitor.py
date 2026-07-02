@@ -258,7 +258,7 @@ def escape_html(s):
 def main():
     log("=== PIB Monitor 시작 ===")
 
-    seen = load_state()
+    seen = []
     seen_set = set(seen)
 
     xml_text = fetch_rss(RSS_URL)
