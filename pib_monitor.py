@@ -41,7 +41,7 @@ RSS_URL = "https://pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3&reg=48"
 # 제목에만 걸린다 → 넓게 잡아두고 메일 받아보며 조절하는 게 실전.
 KEYWORDS = [
     # --- 티어1: 제품 직결 ---
-    "copper", "india",
+    "copper",
     "copper tube",
     "copper pipe",
     "copper alloy",
@@ -258,7 +258,7 @@ def escape_html(s):
 def main():
     log("=== PIB Monitor 시작 ===")
 
-    seen = []
+    seen = load_state()
     seen_set = set(seen)
 
     xml_text = fetch_rss(RSS_URL)
