@@ -19,6 +19,7 @@ import os
 import sys
 import json
 import time
+import re
 import smtplib
 import urllib.request
 import ssl
@@ -26,6 +27,11 @@ import xml.etree.ElementTree as ET
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.utils import formatdate
+
+try:
+    import requests
+except ImportError:  # requests가 없는 환경에서도 모니터 자체는 계속 동작
+    requests = None
 
 # ============================================================
 # CONFIG — 여기만 만지면 됨
@@ -250,6 +256,108 @@ def send_email(matches):
     log(f"메일 발송 완료 → {to_list}")
 
 
+def _safe_telegram_text(s, limit=None):
+    """Telegram HTML parse_mode에 안전하게 넣기 위한 최소 이스케이프."""
+    s = "" if s is None else str(s)
+    if limit and len(s) > limit:
+        s = s[:limit - 1] + "…"
+    return escape_html(s)
+
+
+def pdf_filename(m):
+    """텔레그램 PDF 첨부용 파일명 생성. eGazette/PIB 양쪽 구조를 모두 방어."""
+    raw = (
+        m.get("gazette_id")
+        or m.get("prid")
+        or m.get("id")
+        or "notice"
+    )
+    raw = re.sub(r"[^A-Za-z0-9._-]+", "_", str(raw)).strip("_") or "notice"
+    return f"india_notice_{raw}.pdf"
+
+
+def send_telegram(matches):
+    """
+    텔레그램으로 알림 발송.
+
+    - eGazette 구조도 지원:
+      _matched, subject, ministry, gazette_id, _pdf_url, _pdf_bytes
+    - 현재 PIB Monitor 구조도 지원:
+      hits, title, prid, link
+    """
+    token = os.environ.get("TELEGRAM_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if not token or not chat_id:
+        log("[텔레그램] TELEGRAM_TOKEN/TELEGRAM_CHAT_ID 없음 → 건너뜀")
+        return
+
+    if requests is None:
+        log("[텔레그램] requests 모듈 없음 → 건너뜀. requirements.txt에 requests를 추가하세요.")
+        return
+
+    api = f"https://api.telegram.org/bot{token}"
+
+    sent = 0
+    for m in matches:
+        matched = m.get("_matched") or m.get("hits") or m.get("keywords") or []
+        if isinstance(matched, str):
+            matched = [matched]
+
+        title = m.get("subject") or m.get("title") or ""
+        doc_id = m.get("gazette_id") or m.get("prid") or m.get("uid") or ""
+        ministry = m.get("ministry", "")
+        link = m.get("_pdf_url") or m.get("link") or m.get("url") or ""
+
+        # PIB는 PDF가 아니라 보도자료 링크가 주로 들어오므로 문구를 일반화
+        text = (
+            "🔔 <b>인도 규제/공보 신규 감지</b>\n\n"
+            f"[{_safe_telegram_text(', '.join(matched))}] 매칭\n"
+            f"<b>{_safe_telegram_text(title, 200)}</b>\n"
+        )
+        if ministry:
+            text += f"부처: {_safe_telegram_text(ministry, 120)}\n"
+        if doc_id:
+            text += f"ID: {_safe_telegram_text(doc_id, 80)}\n"
+        if link:
+            text += f"링크: {_safe_telegram_text(link, 500)}"
+
+        try:
+            resp = requests.post(
+                f"{api}/sendMessage",
+                data={
+                    "chat_id": chat_id,
+                    "text": text,
+                    "parse_mode": "HTML",
+                    "disable_web_page_preview": True,
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            sent += 1
+
+            # eGazette처럼 PDF bytes가 있는 경우에만 문서 첨부
+            if m.get("_pdf_bytes"):
+                resp = requests.post(
+                    f"{api}/sendDocument",
+                    data={"chat_id": chat_id},
+                    files={
+                        "document": (
+                            pdf_filename(m),
+                            m["_pdf_bytes"],
+                            "application/pdf",
+                        )
+                    },
+                    timeout=60,
+                )
+                resp.raise_for_status()
+
+        except Exception as e:
+            log(f"[텔레그램 전송 실패] {doc_id or title[:40]}: {str(e)[:120]}")
+
+    log(f"[텔레그램 발송] {sent}/{len(matches)}건 → chat {chat_id}")
+
+
+
 def escape_html(s):
     return (s.replace("&", "&amp;").replace("<", "&lt;")
              .replace(">", "&gt;").replace('"', "&quot;"))
@@ -280,6 +388,7 @@ def main():
     if matches:
         try:
             send_email(matches)
+            send_telegram(matches)
         except Exception as e:
             # 메일 실패 시 이번 신규를 기억에 넣지 않아 다음 회차에 재시도되게 함
             log(f"메일 발송 실패 → state 저장 생략(다음 회차 재시도): {e!r}")
